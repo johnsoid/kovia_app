@@ -42,7 +42,8 @@ type PerformerProfileFormData = z.infer<typeof performerProfileSchema>;
 
 interface CapturedContact {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone?: string;
   zip?: string;
@@ -128,7 +129,12 @@ export default function PerformerDashboard() {
           const data = doc.data();
           return {
             id: doc.id,
-            ...data,
+            firstName: data.firstName || '',
+            lastName: data.lastName || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            zip: data.zip || '',
+            state: data.state || '',
             capturedAt: data.capturedAt?.toDate ? data.capturedAt.toDate() : new Date(),
           };
         });
@@ -254,7 +260,7 @@ export default function PerformerDashboard() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>First Name</FormLabel>
-                      <FormControl><Input placeholder="Louis" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Your First Name" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -265,7 +271,7 @@ export default function PerformerDashboard() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Last Name</FormLabel>
-                      <FormControl><Input placeholder="Johnson" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Your Last Name" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -395,7 +401,8 @@ export default function PerformerDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
+                    <TableHead>First Name</TableHead>
+                    <TableHead>Last Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>ZIP</TableHead>
@@ -407,7 +414,8 @@ export default function PerformerDashboard() {
                   {capturedContacts.length > 0 ? (
                     capturedContacts.map((contact) => (
                       <TableRow key={contact.id}>
-                        <TableCell>{contact.name}</TableCell>
+                        <TableCell>{contact.firstName}</TableCell>
+                        <TableCell>{contact.lastName}</TableCell>
                         <TableCell>{contact.email}</TableCell>
                         <TableCell>{contact.phone || '-'}</TableCell>
                         <TableCell>{contact.zip || '-'}</TableCell>
@@ -417,7 +425,7 @@ export default function PerformerDashboard() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center">
+                      <TableCell colSpan={7} className="text-center">
                         No contacts captured yet.
                       </TableCell>
                     </TableRow>
