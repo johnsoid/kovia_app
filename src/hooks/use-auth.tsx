@@ -1,11 +1,10 @@
-
 'use client';
 
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { ReactNode} from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { auth } from '@/lib/firebase'; // Adjust path as needed
+import { auth } from '../lib/firebase'; // Adjust path as needed
 
 interface AuthContextType {
   user: User | null;

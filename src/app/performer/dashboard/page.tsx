@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { z } from 'zod';
@@ -79,89 +78,90 @@ export default function PerformerDashboard() {
   });
 
   // Fetch Performer Profile
-  const fetchProfile = useCallback(async (uid: string) => {
-    setIsLoadingProfile(true);
-    try {
-      const docRef = doc(db, 'performers', uid);
-      const docSnap = await getDoc(docRef);
+  const fetchProfile = useCallback(
+    async (uid: string) => {
+      if (!db || !user) return;
+      setIsLoadingProfile(true);
+      try {
+        console.log('[Dashboard] Fetching profile for uid:', uid);
+        const docRef = doc(db, 'performers', uid);
+        const docSnap = await getDoc(docRef);
 
-      if (docSnap.exists()) {
-        const data = docSnap.data() as PerformerProfileFormData;
-        form.reset(data); // Populate form with existing data
-        setProfileExists(true);
-         if(data.userName && typeof window !== 'undefined') { // Ensure window is defined
+        if (docSnap.exists()) {
+          const data = docSnap.data() as PerformerProfileFormData;
+          form.reset(data); // Populate form with existing data
+          setProfileExists(true);
+          if(data.userName && typeof window !== 'undefined') { // Ensure window is defined
             setQrCodeUrl(`${window.location.origin}/c/${data.userName}`);
+          }
+          console.log('[Dashboard] Profile fetched:', docSnap.data());
+        } else {
+          setProfileExists(false);
+          form.reset(); // Reset form if no profile exists
+          setQrCodeUrl('');
+          console.log('[Dashboard] No profile found');
         }
-      } else {
-        setProfileExists(false);
-        form.reset(); // Reset form if no profile exists
+      } catch (error) {
+        console.error('[Dashboard] Error fetching profile:', error);
+        toast({ title: "Error", description: "Could not load profile.", variant: "destructive" });
         setQrCodeUrl('');
+      } finally {
+        setIsLoadingProfile(false);
       }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-      toast({ title: "Error", description: "Could not load profile.", variant: "destructive" });
-       setQrCodeUrl('');
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  }, [form, toast]);
+    },
+    [form, toast, user, db]
+  );
 
    // Fetch Captured Contacts
-  const fetchContacts = useCallback(async (userName: string) => {
-    if (!userName) return;
-    setIsLoadingContacts(true);
-    try {
-      const contactsRef = collection(db, 'contacts');
-      // Query contacts where the 'performerUserName' field matches the current user's username
-      const q = query(contactsRef, where("performerUserName", "==", userName));
-      const querySnapshot = await getDocs(q);
-      const fetchedContacts: CapturedContact[] = querySnapshot.docs.map(doc => {
-        const data = doc.data() as DocumentData;
-        return {
-          id: doc.id,
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          zip: data.zip,
-          state: data.state,
-          capturedAt: data.capturedAt?.toDate ? data.capturedAt.toDate() : new Date(), // Convert Firestore timestamp safely
-        };
-      });
-       // Sort by capture date, newest first
-      fetchedContacts.sort((a, b) => b.capturedAt.getTime() - a.capturedAt.getTime());
-      setCapturedContacts(fetchedContacts);
-    } catch (error) {
-      console.error("Error fetching contacts:", error);
-      toast({ title: "Error", description: "Could not load captured contacts.", variant: "destructive" });
-    } finally {
-      setIsLoadingContacts(false);
-    }
-  }, [toast]);
-
+  const fetchContacts = useCallback(
+    async (performerUid: string) => {
+      if (!db || !user) return;
+      setIsLoadingContacts(true);
+      try {
+        console.log('[Dashboard] Fetching contacts for performerUid:', performerUid);
+        const q = query(
+          collection(db, 'contacts'),
+          where('performerUid', '==', performerUid)
+        );
+        const querySnapshot = await getDocs(q);
+        const fetchedContacts = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            capturedAt: data.capturedAt?.toDate ? data.capturedAt.toDate() : new Date(),
+          };
+        });
+        setCapturedContacts(fetchedContacts);
+        console.log('[Dashboard] Contacts fetched:', fetchedContacts);
+      } catch (error) {
+        console.error('[Dashboard] Error fetching contacts:', error);
+      } finally {
+        setIsLoadingContacts(false);
+      }
+    },
+    [user, db]
+  );
 
   // Effect to fetch profile and contacts when user is available
   useEffect(() => {
     if (!authLoading && user) {
       fetchProfile(user.uid);
-      // We need the username to fetch contacts, which comes from the profile fetch
-    } else if (!authLoading && !user) {
-      router.push('/auth'); // Redirect if not logged in
+      fetchContacts(user.uid);
     }
-  }, [user, authLoading, router, fetchProfile]);
-
+  }, [authLoading, user, fetchProfile, fetchContacts]);
 
   // Effect to fetch contacts once profile is loaded and username is available
   useEffect(() => {
-      const userName = form.getValues('userName');
-       if (profileExists && userName && !isLoadingProfile) {
-          fetchContacts(userName);
-       } else if (!isLoadingProfile && !profileExists) {
-           // If profile doesn't exist yet, clear contacts and stop loading
-           setCapturedContacts([]);
-           setIsLoadingContacts(false);
-       }
-  }, [profileExists, isLoadingProfile, fetchContacts, form]);
-
+    const userName = form.getValues('userName');
+    if (profileExists && userName && !isLoadingProfile) {
+      fetchContacts(user.uid);
+    } else if (!isLoadingProfile && !profileExists) {
+      // If profile doesn't exist yet, clear contacts and stop loading
+      setCapturedContacts([]);
+      setIsLoadingContacts(false);
+    }
+  }, [profileExists, isLoadingProfile, fetchContacts, form, user]);
 
   // Handle Profile Save/Update
   const onSubmit = async (data: PerformerProfileFormData) => {
@@ -169,7 +169,7 @@ export default function PerformerDashboard() {
     setIsSaving(true);
     try {
       const docRef = doc(db, 'performers', user.uid);
-       // Ensure username uniqueness check here if necessary (e.g., using a Cloud Function)
+      // Ensure username uniqueness check here if necessary (e.g., using a Cloud Function)
       if (profileExists) {
         await updateDoc(docRef, { ...data, userId: user.uid }); // Add userId on update too
         toast({ title: "Success", description: "Profile updated successfully." });
@@ -178,50 +178,49 @@ export default function PerformerDashboard() {
         setProfileExists(true); // Set profile exists after creation
         toast({ title: "Success", description: "Profile created successfully." });
       }
-       if (typeof window !== 'undefined') { // Ensure window is defined
-           setQrCodeUrl(`${window.location.origin}/c/${data.userName}`); // Update QR code URL after save
-       }
-       fetchContacts(data.userName); // Re-fetch contacts in case username changed
+      if (typeof window !== 'undefined') { // Ensure window is defined
+        setQrCodeUrl(`${window.location.origin}/c/${data.userName}`); // Update QR code URL after save
+      }
+      fetchContacts(user.uid); // Re-fetch contacts in case username changed
     } catch (error: any) {
       console.error("Error saving profile:", error);
-       let errMsg = "Could not save profile.";
-        // Add specific error handling if needed, e.g., for username conflicts
-        // if (error.code === '...') errMsg = 'Username already taken.';
+      let errMsg = "Could not save profile.";
+      // Add specific error handling if needed, e.g., for username conflicts
+      // if (error.code === '...') errMsg = 'Username already taken.';
       toast({ title: "Error", description: errMsg, variant: "destructive" });
-       setQrCodeUrl('');
+      setQrCodeUrl('');
     } finally {
       setIsSaving(false);
     }
   };
 
-   const handleLogout = async () => {
-        try {
-            await signOut(auth);
-            router.push('/auth');
-        } catch (error) {
-            console.error("Error signing out: ", error);
-            toast({ title: "Logout Error", description: "Could not log out.", variant: "destructive"})
-        }
-    };
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push('/auth');
+    } catch (error) {
+      console.error("Error signing out: ", error);
+      toast({ title: "Logout Error", description: "Could not log out.", variant: "destructive"})
+    }
+  };
 
   // Use Effect for generating QR code URL to avoid hydration errors
-   useEffect(() => {
-     const userName = form.getValues('userName');
-     if (userName && typeof window !== 'undefined') {
-       setQrCodeUrl(`${window.location.origin}/c/${userName}`);
-     } else {
-        setQrCodeUrl('');
-     }
-   }, [form, form.watch('userName')]); // Watch username changes. Added form dependency
-
+  useEffect(() => {
+    const userName = form.getValues('userName');
+    if (userName && typeof window !== 'undefined') {
+      setQrCodeUrl(`${window.location.origin}/c/${userName}`);
+    } else {
+      setQrCodeUrl('');
+    }
+  }, [form, form.watch('userName')]); // Watch username changes. Added form dependency
 
   if (authLoading || isLoadingProfile) {
     return (
       <div className="container mx-auto p-4 md:p-8 space-y-6">
-         <div className="flex justify-between items-center">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-10 w-24" />
-         </div>
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-24" />
+        </div>
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -232,12 +231,12 @@ export default function PerformerDashboard() {
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8">
-       <header className="flex justify-between items-center">
-           <h1 className="text-2xl font-semibold">Performer Dashboard</h1>
-           <Button variant="outline" onClick={handleLogout}>
-               <LogOut className="mr-2 h-4 w-4" /> Logout
-           </Button>
-       </header>
+      <header className="flex justify-between items-center">
+        <h1 className="text-2xl font-semibold">Performer Dashboard</h1>
+        <Button variant="outline" onClick={handleLogout}>
+          <LogOut className="mr-2 h-4 w-4" /> Logout
+        </Button>
+      </header>
 
       {/* Profile Edit Form */}
       <Card>
@@ -249,41 +248,41 @@ export default function PerformerDashboard() {
           <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <FormField
-                    control={form.control}
-                    name="firstName"
-                    render={({ field }) => (
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
                     <FormItem>
-                        <FormLabel>First Name</FormLabel>
-                        <FormControl><Input placeholder="Louis" {...field} /></FormControl>
-                        <FormMessage />
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl><Input placeholder="Louis" {...field} /></FormControl>
+                      <FormMessage />
                     </FormItem>
-                    )}
+                  )}
                 />
-                 <FormField
-                    control={form.control}
-                    name="lastName"
-                    render={({ field }) => (
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
                     <FormItem>
-                        <FormLabel>Last Name</FormLabel>
-                        <FormControl><Input placeholder="Johnson" {...field} /></FormControl>
-                        <FormMessage />
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl><Input placeholder="Johnson" {...field} /></FormControl>
+                      <FormMessage />
                     </FormItem>
-                    )}
+                  )}
                 />
               </div>
-               <FormField
+              <FormField
                 control={form.control}
                 name="userName"
                 render={({ field }) => (
-                <FormItem>
+                  <FormItem>
                     <FormLabel>Username</FormLabel>
                     <FormControl><Input placeholder="your_unique_username" {...field} /></FormControl>
                     <FormDescription>Unique identifier for your capture page URL (e.g., /c/your_username).</FormDescription>
                     <FormMessage />
-                </FormItem>
+                  </FormItem>
                 )}
-               />
+              />
               <FormField
                 control={form.control}
                 name="defaultRedirectUrl"
@@ -297,34 +296,34 @@ export default function PerformerDashboard() {
                 )}
               />
 
-               {/* Social Links */}
+              {/* Social Links */}
               <div>
                 <Label className="mb-2 block">Social Links</Label>
                 <div className="space-y-3">
                   {fields.map((field, index) => (
                     <div key={field.id} className="flex items-end gap-2">
-                       <FormField
-                            control={form.control}
-                            name={`socials.${index}.label`}
-                            render={({ field: itemField }) => (
-                                <FormItem className="flex-1">
-                                <FormLabel className="sr-only">Label</FormLabel>
-                                <FormControl><Input placeholder="YouTube" {...itemField} /></FormControl>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                       <FormField
-                            control={form.control}
-                            name={`socials.${index}.url`}
-                            render={({ field: itemField }) => (
-                                <FormItem className="flex-1">
-                                <FormLabel className="sr-only">URL</FormLabel>
-                                <FormControl><Input type="url" placeholder="https://..." {...itemField} /></FormControl>
-                                <FormMessage />
-                                </FormItem>
-                             )}
-                        />
+                      <FormField
+                        control={form.control}
+                        name={`socials.${index}.label`}
+                        render={({ field: itemField }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel className="sr-only">Label</FormLabel>
+                            <FormControl><Input placeholder="YouTube" {...itemField} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`socials.${index}.url`}
+                        render={({ field: itemField }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel className="sr-only">URL</FormLabel>
+                            <FormControl><Input type="url" placeholder="https://..." {...itemField} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                       <Button
                         type="button"
                         variant="destructive"
@@ -354,81 +353,81 @@ export default function PerformerDashboard() {
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <Save className="mr-2 h-4 w-4" /> {profileExists ? 'Update Profile' : 'Create Profile'}
               </Button>
-               {profileExists && qrCodeUrl && (
-                 <Dialog>
-                   <DialogTrigger asChild>
-                     <Button variant="outline">
-                       <QrCode className="mr-2 h-4 w-4" /> Show QR Code
-                     </Button>
-                   </DialogTrigger>
-                   <DialogContent className="sm:max-w-[425px]">
-                     <DialogHeader>
-                       <DialogTitle>Your Contact Capture QR Code</DialogTitle>
-                       <DialogDescriptionShad>
-                         Share this code with your audience to capture contacts. It links to: {qrCodeUrl}
-                       </DialogDescriptionShad>
-                     </DialogHeader>
-                     <div className="flex justify-center p-4 bg-white rounded-md">
-                       <QRCode value={qrCodeUrl} size={256} level="H" />
-                     </div>
-                   </DialogContent>
-                 </Dialog>
-               )}
-               {profileExists && !qrCodeUrl && (
-                    <p className="text-sm text-muted-foreground">Save profile with a username to generate QR code.</p>
-               )}
+              {profileExists && qrCodeUrl && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">
+                      <QrCode className="mr-2 h-4 w-4" /> Show QR Code
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Your Contact Capture QR Code</DialogTitle>
+                      <DialogDescriptionShad>
+                        Share this code with your audience to capture contacts. It links to: {qrCodeUrl}
+                      </DialogDescriptionShad>
+                    </DialogHeader>
+                    <div className="flex justify-center p-4 bg-white rounded-md">
+                      <QRCode value={qrCodeUrl} size={256} level="H" />
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+              {profileExists && !qrCodeUrl && (
+                <p className="text-sm text-muted-foreground">Save profile with a username to generate QR code.</p>
+              )}
             </CardFooter>
           </form>
         </Form>
       </Card>
 
-       {/* Captured Contacts Table */}
-       {profileExists && (
-            <Card>
-                <CardHeader>
-                <CardTitle>Captured Contacts</CardTitle>
-                <CardDescription>Contacts collected through your QR code page.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                {isLoadingContacts ? (
-                    <Skeleton className="h-48 w-full" />
-                ) : (
-                    <Table>
-                    <TableHeader>
-                        <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Phone</TableHead>
-                        <TableHead>ZIP</TableHead>
-                        <TableHead>State</TableHead>
-                        <TableHead>Date</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {capturedContacts.length > 0 ? (
-                        capturedContacts.map((contact) => (
-                            <TableRow key={contact.id}>
-                            <TableCell>{contact.name}</TableCell>
-                            <TableCell>{contact.email}</TableCell>
-                            <TableCell>{contact.phone || '-'}</TableCell>
-                            <TableCell>{contact.zip || '-'}</TableCell>
-                            <TableCell>{contact.state || '-'}</TableCell>
-                            <TableCell>{contact.capturedAt.toLocaleDateString()}</TableCell>
-                            </TableRow>
-                        ))
-                        ) : (
-                        <TableRow>
-                            <TableCell colSpan={6} className="text-center">
-                            No contacts captured yet.
-                            </TableCell>
-                        </TableRow>
-                        )}
-                    </TableBody>
-                    </Table>
-                )}
-                </CardContent>
-            </Card>
-       )}
+      {/* Captured Contacts Table */}
+      {profileExists && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Captured Contacts</CardTitle>
+            <CardDescription>Contacts collected through your QR code page.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingContacts ? (
+              <Skeleton className="h-48 w-full" />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>ZIP</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {capturedContacts.length > 0 ? (
+                    capturedContacts.map((contact) => (
+                      <TableRow key={contact.id}>
+                        <TableCell>{contact.name}</TableCell>
+                        <TableCell>{contact.email}</TableCell>
+                        <TableCell>{contact.phone || '-'}</TableCell>
+                        <TableCell>{contact.zip || '-'}</TableCell>
+                        <TableCell>{contact.state || '-'}</TableCell>
+                        <TableCell>{contact.capturedAt.toLocaleDateString()}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">
+                        No contacts captured yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

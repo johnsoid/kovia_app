@@ -1,7 +1,7 @@
 'use client';
 
-import type { z } from 'zod';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import * as z from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -28,6 +28,7 @@ const contactSchema = z.object({
 type ContactFormData = z.infer<typeof contactSchema>;
 
 interface PerformerData {
+    id: string;
     firstName: string;
     lastName: string;
     userName: string;
@@ -47,7 +48,6 @@ export default function ContactCapturePage() {
   const [submitted, setSubmitted] = useState(false);
   const [derivedState, setDerivedState] = useState<string>('');
 
-
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
     defaultValues: {
@@ -58,104 +58,92 @@ export default function ContactCapturePage() {
     },
   });
 
-   // Debounce function
-    const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
-        let timeout: NodeJS.Timeout;
-
-        return (...args: Parameters<F>): Promise<ReturnType<F>> =>
-        new Promise(resolve => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => resolve(func(...args)), waitFor);
-        });
-    };
-
-
-    // Debounced zip code lookup
-    const debouncedZipLookup = useCallback(debounce(async (zip: string) => {
-        if (zip && /^\d{5}$/.test(zip)) {
-            try {
-                const { state } = await getZipCodeInfo(zip);
-                setDerivedState(state);
-            } catch (error) {
-                console.error("Error fetching zip code info:", error);
-                setDerivedState(''); // Clear state on error
-                 toast({ title: "ZIP Code Error", description: "Could not verify ZIP code.", variant: "destructive"})
-            }
-        } else {
-            setDerivedState(''); // Clear state if zip is invalid or empty
-        }
-    }, 500), [toast]); // 500ms delay
-
-
-  useEffect(() => {
-    const fetchPerformer = async () => {
-      if (!username) return;
+  const fetchPerformer = useCallback(
+    async (userName: string) => {
+      if (!db) return;
       setIsLoading(true);
       try {
-        const performersRef = collection(db, 'performers');
-        const q = query(performersRef, where('userName', '==', username));
+        const q = query(
+          collection(db, 'performers'),
+          where('userName', '==', userName)
+        );
         const querySnapshot = await getDocs(q);
-
         if (!querySnapshot.empty) {
-          // Assuming username is unique, take the first result
           const docSnap = querySnapshot.docs[0];
-          setPerformer(docSnap.data() as PerformerData);
+          setPerformer({ id: docSnap.id, ...docSnap.data() });
         } else {
-          // Handle performer not found - maybe redirect or show error
-          console.error('Performer not found');
-          toast({ title: "Not Found", description: "Performer profile not found.", variant: "destructive" });
-          // Consider redirecting: router.push('/not-found');
+          setPerformer(null);
         }
       } catch (error) {
-        console.error('Error fetching performer:', error);
-        toast({ title: "Error", description: "Could not load performer details.", variant: "destructive" });
+        console.error('[ContactCapture] Error fetching performer:', error);
+        setPerformer(null);
       } finally {
         setIsLoading(false);
       }
-    };
+    },
+    [db]
+  );
 
-    fetchPerformer();
-  }, [username, toast, router]);
-
-    // Effect to watch ZIP code changes and trigger lookup
-    useEffect(() => {
-        const subscription = form.watch((value, { name }) => {
-        if (name === 'zip') {
-            debouncedZipLookup(value.zip ?? '');
+  const debouncedZipLookup = useCallback(
+    ((zip: string) => {
+      if (zip && /^\d{5}$/.test(zip)) {
+        try {
+          const { state } = getZipCodeInfo(zip);
+          setDerivedState(state);
+        } catch (error) {
+          console.error("Error fetching zip code info:", error);
+          setDerivedState(''); // Clear state on error
+          toast({ title: "ZIP Code Error", description: "Could not verify ZIP code.", variant: "destructive"})
         }
+      } else {
+        setDerivedState(''); // Clear state if zip is invalid or empty
+      }
+    }), [toast]
+  );
+
+  const onSubmit = useCallback(
+    async (data: z.infer<typeof contactSchema>) => {
+      if (!db || !performer) return;
+      setIsSubmitting(true);
+      try {
+        await addDoc(collection(db, 'contacts'), {
+          ...data,
+          performerUid: performer.id,
+          state: derivedState || null, // Add derived state
+          capturedAt: serverTimestamp(), // Add timestamp
         });
-        return () => subscription.unsubscribe();
-    }, [form, debouncedZipLookup]);
+        setSubmitted(true);
+        toast({ title: "Success!", description: "Your contact information has been saved." });
 
-
-  const onSubmit = async (data: ContactFormData) => {
-    if (!performer) return;
-    setIsSubmitting(true);
-    try {
-      await addDoc(collection(db, 'contacts'), {
-        ...data,
-        state: derivedState || null, // Add derived state
-        performerUserName: performer.userName, // Link contact to performer
-        capturedAt: serverTimestamp(), // Add timestamp
-      });
-      setSubmitted(true);
-      toast({ title: "Success!", description: "Your contact information has been saved." });
-
-      // Redirect after a short delay
-      setTimeout(() => {
-           if (performer.defaultRedirectUrl) {
-                window.location.href = performer.defaultRedirectUrl; // External redirect
-           }
+        // Redirect after a short delay
+        setTimeout(() => {
+          if (performer.defaultRedirectUrl) {
+            window.location.href = performer.defaultRedirectUrl; // External redirect
+          }
           // No redirect if defaultRedirectUrl is not set
-      }, 2000); // 2 second delay
+        }, 2000); // 2 second delay
+      } catch (error) {
+        console.error('[ContactCapture] Error submitting contact:', error);
+        toast({ title: "Submission Error", description: "Could not save contact information.", variant: "destructive" });
+      } finally {
+        setIsSubmitting(false); // Allow retry on error
+      }
+    },
+    [db, performer, derivedState, toast]
+  );
 
-    } catch (error) {
-      console.error('Error submitting contact:', error);
-      toast({ title: "Submission Error", description: "Could not save contact information.", variant: "destructive" });
-      setIsSubmitting(false); // Allow retry on error
-    }
-     // Don't set isSubmitting to false on success to prevent resubmission
-  };
+  useEffect(() => {
+    fetchPerformer(username);
+  }, [username]);
+
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === 'zip') {
+        debouncedZipLookup(value.zip ?? '');
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form, debouncedZipLookup]);
 
   if (isLoading) {
     return (
@@ -169,15 +157,15 @@ export default function ContactCapturePage() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-secondary p-4">
         <Card className="w-full max-w-md">
-           <CardHeader>
-               <CardTitle>Error</CardTitle>
-           </CardHeader>
-           <CardContent>
-               <p>Could not find the requested performer profile.</p>
-           </CardContent>
-           <CardFooter>
-                <Button onClick={() => router.back()}>Go Back</Button>
-           </CardFooter>
+          <CardHeader>
+            <CardTitle>Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>Could not find the requested performer profile.</p>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={() => router.back()}>Go Back</Button>
+          </CardFooter>
         </Card>
       </div>
     );
@@ -187,22 +175,22 @@ export default function ContactCapturePage() {
     <div className="flex items-center justify-center min-h-screen bg-secondary p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
-           {/* Placeholder for performer image - replace with actual image logic */}
+          {/* Placeholder for performer image - replace with actual image logic */}
           <div className="mx-auto mb-4 h-24 w-24 rounded-full bg-muted flex items-center justify-center">
-             <User className="h-12 w-12 text-muted-foreground" />
-             {/* <Image src={performer.profileImageUrl || '/default-avatar.png'} alt={`${performer.firstName} ${performer.lastName}`} width={96} height={96} className="rounded-full object-cover" data-ai-hint="comedian portrait" /> */}
+            <User className="h-12 w-12 text-muted-foreground" />
+            {/* <Image src={performer.profileImageUrl || '/default-avatar.png'} alt={`${performer.firstName} ${performer.lastName}`} width={96} height={96} className="rounded-full object-cover" data-ai-hint="comedian portrait" /> */}
           </div>
           <CardTitle className="text-2xl">{`${performer.firstName} ${performer.lastName}`}</CardTitle>
           <CardDescription>Stay connected! Sign up for updates.</CardDescription>
         </CardHeader>
 
         {submitted ? (
-           <CardContent className="text-center space-y-4 py-12">
-              <CheckCircle className="mx-auto h-16 w-16 text-green-500" />
-              <p className="text-xl font-medium">Thank You!</p>
-              <p className="text-muted-foreground">Your information has been submitted.</p>
-              {performer.defaultRedirectUrl && <p className="text-sm text-muted-foreground">Redirecting soon...</p>}
-           </CardContent>
+          <CardContent className="text-center space-y-4 py-12">
+            <CheckCircle className="mx-auto h-16 w-16 text-green-500" />
+            <p className="text-xl font-medium">Thank You!</p>
+            <p className="text-muted-foreground">Your information has been submitted.</p>
+            {performer.defaultRedirectUrl && <p className="text-sm text-muted-foreground">Redirecting soon...</p>}
+          </CardContent>
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
@@ -233,7 +221,7 @@ export default function ContactCapturePage() {
                     </FormItem>
                   )}
                 />
-                 <FormField
+                <FormField
                   control={form.control}
                   name="phone"
                   render={({ field }) => (
@@ -242,30 +230,30 @@ export default function ContactCapturePage() {
                       <FormControl>
                         <Input type="tel" placeholder="(555) 123-4567" {...field} />
                       </FormControl>
-                       <FormMessage />
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
-                 <div className="grid grid-cols-2 gap-4">
-                    <FormField
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
                     control={form.control}
                     name="zip"
                     render={({ field }) => (
-                        <FormItem>
+                      <FormItem>
                         <FormLabel>ZIP Code (Optional)</FormLabel>
                         <FormControl>
-                            <Input placeholder="90210" {...field} maxLength={5}/>
+                          <Input placeholder="90210" {...field} maxLength={5}/>
                         </FormControl>
                         <FormMessage />
-                        </FormItem>
+                      </FormItem>
                     )}
-                    />
-                     <FormItem>
-                        <FormLabel>State</FormLabel>
-                        <Input placeholder="CA" value={derivedState} readOnly disabled className="bg-muted"/>
-                        <FormDescription className="text-xs">Auto-filled from ZIP</FormDescription>
-                    </FormItem>
-                 </div>
+                  />
+                  <FormItem>
+                    <FormLabel>State</FormLabel>
+                    <Input placeholder="CA" value={derivedState} readOnly disabled className="bg-muted"/>
+                    <FormDescription className="text-xs">Auto-filled from ZIP</FormDescription>
+                  </FormItem>
+                </div>
               </CardContent>
               <CardFooter>
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
@@ -277,30 +265,23 @@ export default function ContactCapturePage() {
           </Form>
         )}
 
-         {/* Optional: Display Social Links */}
+        {/* Optional: Display Social Links */}
         {performer.socials && performer.socials.length > 0 && !submitted && (
-           <CardFooter className="flex-col items-start gap-2 pt-4 border-t">
-                <p className="text-sm font-medium text-muted-foreground">Follow {performer.firstName}:</p>
-                <div className="flex flex-wrap gap-3">
-                {performer.socials.map((social) => (
-                    <Button key={social.label} variant="outline" size="sm" asChild>
-                    <a href={social.url} target="_blank" rel="noopener noreferrer">
-                       {/* Basic text label for now, replace with icons later */}
-                       {social.label}
-                    </a>
-                    </Button>
-                ))}
-                </div>
-           </CardFooter>
+          <CardFooter className="flex-col items-start gap-2 pt-4 border-t">
+            <p className="text-sm font-medium text-muted-foreground">Follow {performer.firstName}:</p>
+            <div className="flex flex-wrap gap-3">
+              {performer.socials.map((social) => (
+                <Button key={social.label} variant="outline" size="sm" asChild>
+                  <a href={social.url} target="_blank" rel="noopener noreferrer">
+                    {/* Basic text label for now, replace with icons later */}
+                    {social.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
+          </CardFooter>
         )}
       </Card>
     </div>
   );
-}
-
-
-// Helper hook for debouncing (if needed elsewhere)
-function useCallback<T extends (...args: any[]) => any>(callback: T, deps: React.DependencyList): T {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    return React.useCallback(callback, deps);
 }

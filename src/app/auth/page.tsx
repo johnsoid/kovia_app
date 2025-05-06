@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { z as zod } from 'zod'; // Use import type for Zod type
@@ -7,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase'; // Ensure auth is imported
+import { auth, db } from '@/lib/firebase'; // Ensure auth is imported
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
