@@ -1,12 +1,29 @@
-# Kovia Connect
+# Kovia App
 
-Kovia Connect is a QR contact-capture application designed for live entertainers. It allows performers to easily collect contact information from their audience members via a personalized QR code linked to a simple capture form.
+Kovia App is a modern, full-stack web platform designed for live entertainers (performers, musicians, etc.) to easily collect fan contact information at events using personalized QR codes. The core value proposition is to enable performers to capture audience details securely and efficiently, provide links to their socials, and manage their contacts from a dashboard—all without friction for the end user.
 
-## Features
+---
 
-*   **Authentication:** Secure sign-up and login for performers using Firebase Authentication (Email/Password).
-*   **Performer Dashboard:** Manage profile information (name, username, social links, default redirect URL) and view a table of captured contacts.
-*   **QR Code Generation:** Automatically generates a unique QR code linking to the performer's contact capture page.
+## Core Features
+
+- **Performer Authentication (Email/Password):** Secure login and registration for performers.
+- **Performer Dashboard:** Manage performer profile, view and manage captured contacts.
+- **Personalized QR Code Generation:** Each performer gets a unique QR code linking to their public contact capture page.
+- **Public Contact Capture Page:** `/c/[username]` route where fans submit their info.
+- **Firestore Data Storage:** Performer profiles and captured contacts are stored in Firebase Cloud Firestore.
+- **Basic Admin Dashboard:** Placeholder for admin user listing (future work required for full functionality).
+- **Contact Data Details:** Contact info is normalized (first/last name, email, phone, ZIP, state).
+- **Post-Submission Redirect:** Performers can configure a redirect URL after fans submit their info.
+
+---
+
+## Tech Stack
+
+- **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS, Shadcn UI, Zod (schema validation), React Hook Form (form management)
+- **Backend/Data:** Firebase (Authentication, Firestore). Cloud Functions are planned for secure public writes.
+- **Development:** npm/yarn, Git
+
+---
 *   **Contact Capture Page:** A public-facing page (accessed via `/c/[username]`) where audience members can submit their name, email, phone (optional), and ZIP code (optional).
 *   **Data Storage:** Performer profiles and captured contacts are stored securely in Firestore.
 *   **Admin Dashboard (Basic):** A simple view for administrators to see registered users (placeholder, requires backend logic for full user listing).
