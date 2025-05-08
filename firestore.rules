@@ -1,41 +1,28 @@
-// Rules for the Kovia App Firestore Database
-
-rules_version = '2'; // Use the latest rules version
-
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rule for the 'performers' collection
+    /* performers collection */
     match /performers/{userId} {
-      // Allow authenticated users to read and write ONLY their OWN document by UID
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Anyone may read (get OR list) performer docs
+      allow read: if true;          // read covers get + list
+
+      // Only the owner may write to their profile
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Rule for the 'performers' COLLECTION path (for list/query operations)
-    // Change 'allow list' to 'allow read, list'
-    match /performers {
-        allow read, list: if request.auth == null;
-    }
-
-    // Rule for the 'contacts' collection (as refined before)
+    /* contacts collection */
     match /contacts/{contactId} {
-      // Authenticated performers can read/list ONLY contact documents
-      // where the 'performerUid' field in the document data
-      // matches their authenticated user ID (UID).
-      allow read: if request.auth != null && resource.data.performerUid == request.auth.uid;
-
-      // Deny CREATE access for all client requests (authenticated or unauthenticated).
-      // Public contact form submissions MUST be handled by a trusted backend (Cloud Function).
-      allow create: if false; // Keep this secure for production
-
-      // Deny updates or deletes for all clients.
-      allow update, delete: if false;
+      allow read, list: if request.auth != null
+                        && resource.data.performerUid == request.auth.uid;
+      allow create, update, delete: if false;
     }
 
-    // Default rule: Deny all other access.
-    // This makes your database secure by default.
+    /* default deny */
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
+

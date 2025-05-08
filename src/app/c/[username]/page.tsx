@@ -10,7 +10,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, CheckCircle, User } from 'lucide-react';
@@ -157,19 +157,7 @@ export default function ContactCapturePage() {
 
   if (!performer) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-secondary p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>Could not find the requested performer profile.</p>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={() => router.back()}>Go Back</Button>
-          </CardFooter>
-        </Card>
-      </div>
+      <p className="text-center text-muted-foreground">Performer not found.</p>
     );
   }
 
