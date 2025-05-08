@@ -1,17 +1,23 @@
 # Kovia App
 
-Kovia App is a modern, full-stack web platform designed for live entertainers (performers, musicians, etc.) to easily collect fan contact information at events using personalized QR codes. The core value proposition is to enable performers to capture audience details securely and efficiently, provide links to their socials, and manage their contacts from a dashboard—all without friction for the end user.
+[![Production Status](https://img.shields.io/badge/status-live-brightgreen)](https://kovia-app-v1--kovia-connect.us-central1.hosted.app)
+
+Kovia App is a modern, full-stack web platform designed for live entertainers (performers, musicians, etc.) to easily collect fan contact information at events using personalized QR codes. The platform is now **live and production-ready**, hosted on **Firebase App Hosting** and continuously deployed via **GitHub Actions**.
+
+**Live App URL:** [https://kovia-app-v1--kovia-connect.us-central1.hosted.app](https://kovia-app-v1--kovia-connect.us-central1.hosted.app)
 
 ---
 
 ## Core Features
 
-- **Performer Authentication (Email/Password):** Secure login and registration for performers.
-- **Performer Dashboard:** Manage performer profile, view and manage captured contacts.
+- **Production Hosting:** Live on Firebase App Hosting, with CI/CD via GitHub Actions.
+- **Environment Variables:** Securely managed via Firebase App Hosting Secret Manager (no longer using `.env.local` in deployment).
+- **Firebase Authentication (Email/Password):** Secure login and registration for performers.
+- **Performer Dashboard:** Manage performer profile, view and manage captured contacts. Fully functional in production.
 - **Personalized QR Code Generation:** Each performer gets a unique QR code linking to their public contact capture page.
-- **Public Contact Capture Page:** `/c/[username]` route where fans submit their info.
+- **Public Contact Capture Page:** `/c/[username]` route where fans submit their info. Fully functional in production.
 - **Firestore Data Storage:** Performer profiles and captured contacts are stored in Firebase Cloud Firestore.
-- **Basic Admin Dashboard:** Placeholder for admin user listing (future work required for full functionality).
+- **Admin Dashboard:** Basic placeholder for admin user listing (future work required for full functionality).
 - **Contact Data Details:** Contact info is normalized (first/last name, email, phone, ZIP, state).
 - **Post-Submission Redirect:** Performers can configure a redirect URL after fans submit their info.
 
@@ -20,13 +26,13 @@ Kovia App is a modern, full-stack web platform designed for live entertainers (p
 ## Tech Stack
 
 - **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS, Shadcn UI, Zod (schema validation), React Hook Form (form management)
-- **Backend/Data:** Firebase (Authentication, Firestore). Cloud Functions are planned for secure public writes.
+- **Backend/Data:** Firebase (Authentication, Firestore, Hosting). Cloud Functions are planned for secure public writes. Production environment is configured and running.
 - **Development:** npm/yarn, Git
 
 ---
-*   **Contact Capture Page:** A public-facing page (accessed via `/c/[username]`) where audience members can submit their name, email, phone (optional), and ZIP code (optional).
+*   **Contact Capture Page:** A public-facing page (accessed via `/c/[username]`) where audience members can submit their name, email, phone (optional), and ZIP code (optional). **Working in production.**
 *   **Data Storage:** Performer profiles and captured contacts are stored securely in Firestore.
-*   **Admin Dashboard (Basic):** A simple view for administrators to see registered users (placeholder, requires backend logic for full user listing).
+*   **Admin Dashboard (Basic):** A simple view for administrators to see registered users (**placeholder only**; requires backend logic for full user listing).
 *   **ZIP Code Lookup:** Automatically determines the state based on the entered ZIP code on the capture form.
 
 ## Getting Started
@@ -60,13 +66,17 @@ Kovia App is a modern, full-stack web platform designed for live entertainers (p
     *   Copy the `firebaseConfig` object provided.
 
 4.  **Configure Environment Variables:**
-    *   Copy the example environment file:
-        ```bash
-        cp .env.example .env.local
-        ```
-    *   Open `.env.local` and paste your Firebase configuration values from the previous step. Ensure the variable names match those in `src/lib/firebase.ts` (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`).
-    *   **Important:** `.env.local` is included in `.gitignore` to prevent committing your secret keys.
-    *   **Crucial:** After editing `.env.local`, **you must restart your Next.js development server** for the changes to take effect (stop the `npm run dev` process and run it again).
+    *   **Development:**
+        *   Copy the example environment file:
+            ```bash
+            cp .env.example .env.local
+            ```
+        *   Open `.env.local` and paste your Firebase configuration values from the previous step. Ensure the variable names match those in `src/lib/firebase.ts` (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`).
+        *   `.env.local` is included in `.gitignore` to prevent committing your secret keys.
+        *   After editing `.env.local`, **restart your Next.js development server** for changes to take effect.
+    *   **Production:**
+        *   **Environment variables are now managed via Firebase App Hosting Secret Manager.**
+        *   You do **not** need to deploy a `.env.local` file. Secrets are securely injected into the app at build and runtime via Firebase Hosting.
 
 5.  **(Optional) Seed Initial Data:**
     *   You can manually add the initial performer data to your Firestore database as described in the original prompt (for user `louisJohnson`). Go to your Firestore console, create the `performers` collection, add a document with the ID `louisJohnson`, and populate the fields. Alternatively, adapt the dashboard creation logic to handle initial data setup if needed.
@@ -96,7 +106,12 @@ npm run build
 # or
 yarn build
 ```
-This command builds the application for production usage. Ensure environment variables are correctly configured in your production environment.
+This command builds the application for production usage.
+
+**Production Deployment:**
+- The app is deployed to Firebase App Hosting via GitHub Actions on every push to the `main` branch.
+- Environment variables are injected via Firebase Secret Manager (not `.env.local`).
+- The live app is available at: [https://kovia-app-v1--kovia-connect.us-central1.hosted.app](https://kovia-app-v1--kovia-connect.us-central1.hosted.app)
 
 ### Linting
 
@@ -111,13 +126,21 @@ This command runs the Next.js linter to check code quality.
 
 *   `src/app/`: Main application routes (App Router).
     *   `auth/`: Authentication page.
-    *   `admin/dashboard/`: System admin dashboard.
-    *   `performer/dashboard/`: Performer dashboard.
-    *   `c/[username]/`: Public contact capture page.
+    *   `admin/dashboard/`: System admin dashboard (**placeholder only**)
+    *   `performer/dashboard/`: Performer dashboard (**working in production**)
+    *   `c/[username]/`: Public contact capture page (**working in production**)
 *   `src/components/`: Reusable React components.
     *   `ui/`: ShadCN UI components.
 *   `src/hooks/`: Custom React hooks (e.g., `use-auth`).
 *   `src/lib/`: Utility functions and Firebase configuration (`firebase.ts`).
 *   `src/services/`: Client-side data fetching logic (e.g., `zip-code.ts`).
 *   `public/`: Static assets.
+
+---
+
+## Versioning
+
+This project is now versioned and tagged starting with `v1.0`.
+- Releases are tracked in [CHANGELOG.md](./CHANGELOG.md).
+- Production deployments are tagged and released via GitHub.
 ```
