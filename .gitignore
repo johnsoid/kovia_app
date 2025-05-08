@@ -49,4 +49,5 @@ firebase-debug.log*
 # genkit
 .genkit/log/
 .genkit/trace/
-# .genkit/cache/
+# .genkit/cache/google-cloud-sdk/
+google-cloud-sdk-*.tar.gz
