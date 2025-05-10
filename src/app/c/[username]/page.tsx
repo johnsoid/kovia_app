@@ -193,7 +193,7 @@ export default function ContactCapturePage() {
                       <FormItem>
                         <FormLabel>First Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Contact's First Name" {...field} />
+                          <Input placeholder="First Name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -206,7 +206,7 @@ export default function ContactCapturePage() {
                       <FormItem>
                         <FormLabel>Last Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Contact's Last Name" {...field} />
+                          <Input placeholder="Last Name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -245,7 +245,7 @@ export default function ContactCapturePage() {
                     name="zip"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>ZIP Code (Optional)</FormLabel>
+                        <FormLabel>ZIP Code</FormLabel>
                         <FormControl>
                           <Input placeholder="90210" {...field} maxLength={5}/>
                         </FormControl>

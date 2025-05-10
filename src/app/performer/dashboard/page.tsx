@@ -260,7 +260,7 @@ export default function PerformerDashboard() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>First Name</FormLabel>
-                      <FormControl><Input placeholder="Your First Name" {...field} /></FormControl>
+                      <FormControl><Input placeholder="First Name" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -271,7 +271,7 @@ export default function PerformerDashboard() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Last Name</FormLabel>
-                      <FormControl><Input placeholder="Your Last Name" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Last Name" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -314,7 +314,7 @@ export default function PerformerDashboard() {
                         render={({ field: itemField }) => (
                           <FormItem className="flex-1">
                             <FormLabel className="sr-only">Label</FormLabel>
-                            <FormControl><Input placeholder="YouTube" {...itemField} /></FormControl>
+                            <FormControl><Input placeholder="Social Network Name" {...itemField} /></FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
