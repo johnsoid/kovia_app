@@ -4,8 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import * as z from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getFunctions, httpsCallable, FunctionsError } from 'firebase/functions';
+import { functions as functionsInstance } from '@/lib/firebase'; 
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,7 +74,8 @@ export default function ContactCapturePage() {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
           const docSnap = querySnapshot.docs[0];
-          setPerformer({ id: docSnap.id, ...docSnap.data() });
+          const performerData = docSnap.data() as Omit<PerformerData, 'id'>;
+          setPerformer({ id: docSnap.id, ...performerData });
         } else {
           setPerformer(null);
         }
@@ -87,11 +90,11 @@ export default function ContactCapturePage() {
   );
 
   const debouncedZipLookup = useCallback(
-    ((zip: string) => {
+    (async (zip: string) => {
       if (zip && /^\d{5}$/.test(zip)) {
         try {
-          const { state } = getZipCodeInfo(zip);
-          setDerivedState(state);
+          const info = await getZipCodeInfo(zip);
+          setDerivedState(info?.state || '');
         } catch (error) {
           console.error("Error fetching zip code info:", error);
           setDerivedState(''); // Clear state on error
@@ -104,34 +107,85 @@ export default function ContactCapturePage() {
   );
 
   const onSubmit = useCallback(
-    async (data: z.infer<typeof contactSchema>) => {
-      if (!db || !performer) return;
+    async (formData: ContactFormData) => {
+      if (!functionsInstance || !performer || !username) {
+        toast({ title: "Error", description: "Cannot submit form. System not ready.", variant: "destructive" });
+        return;
+      }
       setIsSubmitting(true);
-      try {
-        await addDoc(collection(db, 'contacts'), {
-          ...data,
-          performerUid: performer.id,
-          state: derivedState || null, // Add derived state
-          capturedAt: serverTimestamp(), // Add timestamp
-        });
-        setSubmitted(true);
-        toast({ title: "Success!", description: "Your contact information has been saved." });
 
-        // Redirect after a short delay
-        setTimeout(() => {
-          if (performer.defaultRedirectUrl) {
-            window.location.href = performer.defaultRedirectUrl; // External redirect
+      const payload = {
+        ...formData,
+        state: derivedState || '',
+        targetUsername: username,
+      };
+
+      try {
+        console.log('[ContactCapture] Calling addContact Cloud Function with payload:', payload);
+        const addContactFunction = httpsCallable<{
+            firstName: string; lastName: string; email: string; phone?: string; zip?: string; state?: string; targetUsername: string;
+          },
+          {
+            success: boolean; message: string; contactId?: string; redirectUrl?: string; fieldErrors?: any;
+          }>(functionsInstance, 'addContact');
+
+        const result = await addContactFunction(payload);
+        const responseData = result.data;
+
+        console.log('[ContactCapture] Cloud Function response:', responseData);
+
+        if (responseData.success) {
+          setSubmitted(true);
+          toast({ title: "Success!", description: responseData.message || "Your contact information has been saved." });
+
+          const redirectUrl = responseData.redirectUrl;
+          if (redirectUrl && typeof redirectUrl === 'string') {
+            setTimeout(() => {
+              window.location.href = redirectUrl;
+            }, 2000);
           }
-          // No redirect if defaultRedirectUrl is not set
-        }, 2000); // 2 second delay
-      } catch (error) {
-        console.error('[ContactCapture] Error submitting contact:', error);
-        toast({ title: "Submission Error", description: "Could not save contact information.", variant: "destructive" });
+        } else {
+          toast({
+            title: "Submission Issue",
+            description: responseData.message || "Could not save contact information.",
+            variant: "destructive"
+          });
+        }
+      } catch (error: any) {
+        console.error('[ContactCapture] Error calling addContact Cloud Function:', error);
+        let title = "Submission Error";
+        let description = "An unexpected error occurred. Please try again.";
+
+        if (error instanceof FunctionsError) {
+          title = `Error (${error.code || 'Unknown'})`;
+          description = error.message;
+          if (error.details && typeof error.details === 'object') {
+            const fieldErrors = error.details as Record<string, string[]>;
+            let messages: string[] = [];
+            for (const key in fieldErrors) {
+              if (fieldErrors[key] && fieldErrors[key].length > 0) {
+                messages.push(`${key}: ${fieldErrors[key].join(', ')}`);
+              }
+            }
+            if(messages.length > 0) {
+              description += "\n\nDetails:\n" + messages.join("\n");
+            }
+          }
+        } else if (error.message) {
+            description = error.message;
+        }
+
+        toast({
+          title,
+          description: (<div className="whitespace-pre-wrap">{description}</div>),
+          variant: "destructive",
+          duration: 10000
+        });
       } finally {
-        setIsSubmitting(false); // Allow retry on error
+        setIsSubmitting(false);
       }
     },
-    [db, performer, derivedState, toast]
+    [functionsInstance, performer, username, derivedState, toast]
   );
 
   useEffect(() => {
@@ -255,7 +309,7 @@ export default function ContactCapturePage() {
                   />
                   <FormItem>
                     <FormLabel>State</FormLabel>
-                    <Input placeholder="CA" value={derivedState} readOnly disabled className="bg-muted"/>
+                    <Input placeholder="CA" value={derivedState ?? ''} readOnly disabled className="bg-muted"/>
                     <FormDescription className="text-xs">Auto-filled from ZIP</FormDescription>
                   </FormItem>
                 </div>
