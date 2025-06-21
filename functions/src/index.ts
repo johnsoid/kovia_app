@@ -1,13 +1,11 @@
 import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
+import { initializeApp } from "firebase-admin/app";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 
-// Initialize Firebase Admin SDK if not already initialized
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
-const db = admin.firestore();
+// Initialize Firebase Admin SDK
+initializeApp();
+const db = getFirestore();
 
 // Zod schema for contact form data (server-side validation)
 const contactSchema = z.object({
@@ -55,13 +53,20 @@ export const addContact = functions.https.onCall(async (request: functions.https
     const performerUid = performerDoc.id;
     const performerProfileData = performerDoc.data();
 
+    console.log("DEBUG FieldValue type:", typeof FieldValue);
+    console.log("DEBUG Timestamp type:", typeof Timestamp);
+    
     const contactToSave = {
       ...contactData,
       performerUid: performerUid,
-      capturedAt: admin.firestore.FieldValue.serverTimestamp(),
+      capturedAt: FieldValue.serverTimestamp(),
     };
 
-    const contactRef = await db.collection("contacts").add(contactToSave);
+    const contactRef = await db
+      .collection("performers")
+      .doc(performerUid)
+      .collection("contacts")
+      .add(contactToSave);
     console.log("Contact added successfully with ID:", contactRef.id, "for performer UID:", performerUid);
 
     return {

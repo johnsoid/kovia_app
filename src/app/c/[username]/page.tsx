@@ -74,7 +74,8 @@ export default function ContactCapturePage() {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
           const docSnap = querySnapshot.docs[0];
-          setPerformer({ id: docSnap.id, ...docSnap.data() });
+          const performerData = docSnap.data() as Omit<PerformerData, 'id'>;
+          setPerformer({ id: docSnap.id, ...performerData });
         } else {
           setPerformer(null);
         }
@@ -89,11 +90,11 @@ export default function ContactCapturePage() {
   );
 
   const debouncedZipLookup = useCallback(
-    ((zip: string) => {
+    (async (zip: string) => {
       if (zip && /^\d{5}$/.test(zip)) {
         try {
-          const { state } = getZipCodeInfo(zip);
-          setDerivedState(state);
+          const info = await getZipCodeInfo(zip);
+          setDerivedState(info?.state || '');
         } catch (error) {
           console.error("Error fetching zip code info:", error);
           setDerivedState(''); // Clear state on error
@@ -137,9 +138,10 @@ export default function ContactCapturePage() {
           setSubmitted(true);
           toast({ title: "Success!", description: responseData.message || "Your contact information has been saved." });
 
-          if (responseData.redirectUrl) {
+          const redirectUrl = responseData.redirectUrl;
+          if (redirectUrl && typeof redirectUrl === 'string') {
             setTimeout(() => {
-              window.location.href = responseData.redirectUrl;
+              window.location.href = redirectUrl;
             }, 2000);
           }
         } else {
@@ -307,7 +309,7 @@ export default function ContactCapturePage() {
                   />
                   <FormItem>
                     <FormLabel>State</FormLabel>
-                    <Input placeholder="CA" value={derivedState} readOnly disabled className="bg-muted"/>
+                    <Input placeholder="CA" value={derivedState ?? ''} readOnly disabled className="bg-muted"/>
                     <FormDescription className="text-xs">Auto-filled from ZIP</FormDescription>
                   </FormItem>
                 </div>

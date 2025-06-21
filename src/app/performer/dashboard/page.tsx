@@ -121,8 +121,7 @@ export default function PerformerDashboard() {
       try {
         console.log('[Dashboard] Fetching contacts for performerUid:', performerUid);
         const q = query(
-          collection(db, 'contacts'),
-          where('performerUid', '==', performerUid)
+          collection(db, 'performers', performerUid, 'contacts')
         );
         const querySnapshot = await getDocs(q);
         const fetchedContacts = querySnapshot.docs.map(doc => {
