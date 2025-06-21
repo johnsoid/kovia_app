@@ -1,7 +1,8 @@
+/* eslint-disable max-len */
 import * as functions from "firebase-functions";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { z } from "zod";
+import {initializeApp} from "firebase-admin/app";
+import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
+import {z} from "zod";
 
 // Initialize Firebase Admin SDK
 initializeApp();
@@ -13,8 +14,8 @@ const contactSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email address"),
   phone: z.string().optional(),
-  zip: z.string().regex(/^\d{5}$/, "Must be a 5-digit ZIP code").optional().or(z.literal('')),
-  state: z.string().optional().or(z.literal('')),
+  zip: z.string().regex(/^\d{5}$/, "Must be a 5-digit ZIP code").optional().or(z.literal("")),
+  state: z.string().optional().or(z.literal("")),
   targetUsername: z.string().min(1, "Target username is required"),
 });
 
@@ -34,7 +35,7 @@ export const addContact = functions.https.onCall(async (request: functions.https
     );
   }
 
-  const { targetUsername, ...contactData } = validationResult.data;
+  const {targetUsername, ...contactData} = validationResult.data;
 
   try {
     const performersRef = db.collection("performers");
@@ -55,7 +56,7 @@ export const addContact = functions.https.onCall(async (request: functions.https
 
     console.log("DEBUG FieldValue type:", typeof FieldValue);
     console.log("DEBUG Timestamp type:", typeof Timestamp);
-    
+
     const contactToSave = {
       ...contactData,
       performerUid: performerUid,
@@ -83,7 +84,7 @@ export const addContact = functions.https.onCall(async (request: functions.https
     throw new functions.https.HttpsError(
       "internal",
       "An internal error occurred while saving your contact information.",
-      (process.env.NODE_ENV === 'development' && error instanceof Error) ? { originalMessage: error.message } : undefined
+      (process.env.NODE_ENV === "development" && error instanceof Error) ? {originalMessage: error.message} : undefined
     );
   }
 });
