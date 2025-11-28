@@ -1,9 +1,8 @@
 /* eslint-disable max-len */
-import {onRequest, HttpsError} from "firebase-functions/v2/https";
-import {Request, Response} from "express";
-import {getFirestore, FieldValue} from "firebase-admin/firestore";
-import {initializeApp} from "firebase-admin/app";
-import {z} from "zod";
+import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { initializeApp } from "firebase-admin/app";
+import { z } from "zod";
 
 // Initialize Firebase Admin SDK
 initializeApp();
@@ -18,50 +17,50 @@ const contactSchema = z.object({
   zip: z.string().regex(/^\d{5}$/, "Must be a 5-digit ZIP code").optional().or(z.literal("")),
   state: z.string().optional().or(z.literal("")),
   targetUsername: z.string().min(1, "Target username is required"),
+  token: z.string().optional(), // Token is now passed in body
 });
 
-export const addContact = onRequest(
-  {region: "us-central1", invoker: "public"},
-  async (req: Request, res: Response) => {
-    // 1. Only allow POST
-    if (req.method !== "POST") {
-      res.set("Allow", "POST");
-      res.status(405).json({error: "Method Not Allowed"});
-      return;
+export const addContact = onCall(
+  { region: "us-central1" },
+  async (request: CallableRequest) => {
+    // 1. Auth Check
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "User must be authenticated (anonymous allowed).");
     }
 
-    // 2. Token check (from query only)
+    // 2. Token check (from data)
     const qrSecret = process.env.QR_SECRET;
-    const token = req.query.token;
+    // Note: In onCall, data is in request.data, not query/body
+    // We expect the token to be passed in the data object now, or we can keep checking query if we really want,
+    // but onCall usually passes everything in the body.
+    // However, the previous code checked req.query.token.
+    // Let's assume for better security we move token to the body payload, OR we check context.
+    // For now, let's look for it in the data payload to be consistent with onCall patterns.
+    const token = request.data.token;
+
+    // Fallback: If the frontend sends it as a query param, onCall doesn't easily expose raw query params.
+    // We will update frontend to send token in body.
     if (!token || token !== qrSecret) {
-      res.status(403).json({error: "Forbidden"});
-      return;
+      throw new HttpsError("permission-denied", "Invalid or missing QR token.");
     }
 
-    // 3. Parse and validate body
-    let data: unknown = req.body;
-    if (!data || typeof data !== "object") {
-      try {
-        data = JSON.parse(req.body as string);
-      } catch {
-        res.status(400).json({error: "Invalid JSON body"});
-        return;
-      }
-    }
+    // 3. Validate body (request.data is already parsed JSON)
+    const data = request.data;
+
     const validationResult = contactSchema.safeParse(data);
     if (!validationResult.success) {
       // eslint-disable-next-line no-console
       console.error("Validation failed:", validationResult.error.flatten().fieldErrors);
-      res.status(400).json({
-        error: "Invalid contact data provided.",
-        details: validationResult.error.flatten().fieldErrors,
-      });
-      return;
+      throw new HttpsError(
+        "invalid-argument",
+        "Invalid contact data provided.",
+        validationResult.error.flatten().fieldErrors
+      );
     }
 
-    const {targetUsername, ...contactData} = validationResult.data;
+    const { targetUsername, ...contactData } = validationResult.data;
     try {
-      // 4. Firestore lookup and write (unchanged logic)
+      // 4. Firestore lookup and write
       const performersRef = db.collection("performers");
       const q = performersRef.where("userName", "==", targetUsername).limit(1);
       const performerSnapshot = await q.get();
@@ -69,8 +68,7 @@ export const addContact = onRequest(
       if (performerSnapshot.empty) {
         // eslint-disable-next-line no-console
         console.error(`Performer with username '${targetUsername}' not found.`);
-        res.status(404).json({error: `Performer '${targetUsername}' not found.`});
-        return;
+        throw new HttpsError("not-found", `Performer '${targetUsername}' not found.`);
       }
 
       const performerDoc = performerSnapshot.docs[0];
@@ -81,6 +79,8 @@ export const addContact = onRequest(
         ...contactData,
         performerUid,
         capturedAt: FieldValue.serverTimestamp(),
+        // Optional: save the auth uid to track who submitted it
+        submittedBy: request.auth.uid,
       };
 
       const contactRef = await db
@@ -91,22 +91,19 @@ export const addContact = onRequest(
       // eslint-disable-next-line no-console
       console.log("Contact added successfully with ID:", contactRef.id, "for performer UID:", performerUid);
 
-      res.status(200).json({
+      return {
         success: true,
         contactId: contactRef.id,
         redirectUrl: performerProfileData.defaultRedirectUrl || null,
-      });
-      return;
+      };
     } catch (error) {
       // 5. Error handling
       // eslint-disable-next-line no-console
       console.error("Error processing contact submission:", error);
-      if (error instanceof HttpsError && error.code === "not-found") {
-        res.status(404).json({error: error.message});
-        return;
+      if (error instanceof HttpsError) {
+        throw error;
       }
-      res.status(500).json({error: "Internal Server Error"});
-      return;
+      throw new HttpsError("internal", "Internal Server Error");
     }
   }
 );

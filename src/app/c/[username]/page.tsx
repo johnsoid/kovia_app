@@ -7,8 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getFunctions, httpsCallable, FunctionsError } from 'firebase/functions';
-import { functions as functionsInstance } from '@/lib/firebase'; 
-import { useParams, useRouter } from 'next/navigation';
+import { functions as functionsInstance } from '@/lib/firebase';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +18,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, CheckCircle, User } from 'lucide-react';
 import Image from 'next/image'; // Using next/image for potential optimization
 import { getZipCodeInfo } from '@/services/zip-code'; // Import zip code service
-
+import { signInAnonymously } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 const contactSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -31,19 +32,21 @@ const contactSchema = z.object({
 type ContactFormData = z.infer<typeof contactSchema>;
 
 interface PerformerData {
-    id: string;
-    firstName: string;
-    lastName: string;
-    userName: string;
-    socials?: { label: string; url: string }[];
-    defaultRedirectUrl?: string;
-    // Add other fields if needed, e.g., profile picture URL
+  id: string;
+  firstName: string;
+  lastName: string;
+  userName: string;
+  socials?: { label: string; url: string }[];
+  defaultRedirectUrl?: string;
+  // Add other fields if needed, e.g., profile picture URL
 }
 
 export default function ContactCapturePage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const username = params.username as string; // Extract username from URL
+  const token = searchParams.get('token');
   const { toast } = useToast();
   const [performer, setPerformer] = useState<PerformerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,7 +101,7 @@ export default function ContactCapturePage() {
         } catch (error) {
           console.error("Error fetching zip code info:", error);
           setDerivedState(''); // Clear state on error
-          toast({ title: "ZIP Code Error", description: "Could not verify ZIP code.", variant: "destructive"})
+          toast({ title: "ZIP Code Error", description: "Could not verify ZIP code.", variant: "destructive" })
         }
       } else {
         setDerivedState(''); // Clear state if zip is invalid or empty
@@ -108,23 +111,27 @@ export default function ContactCapturePage() {
 
   const onSubmit = useCallback(
     async (formData: ContactFormData) => {
-      if (!functionsInstance || !performer || !username) {
+      if (!functionsInstance || !performer || !username || !auth) {
         toast({ title: "Error", description: "Cannot submit form. System not ready.", variant: "destructive" });
         return;
       }
       setIsSubmitting(true);
 
-      const payload = {
-        ...formData,
-        state: derivedState || '',
-        targetUsername: username,
-      };
-
       try {
+        // 1. Authenticate Anonymously
+        await signInAnonymously(auth);
+
+        const payload = {
+          ...formData,
+          state: derivedState || '',
+          targetUsername: username,
+          token: token || '', // Pass token from URL
+        };
+
         console.log('[ContactCapture] Calling addContact Cloud Function with payload:', payload);
         const addContactFunction = httpsCallable<{
-            firstName: string; lastName: string; email: string; phone?: string; zip?: string; state?: string; targetUsername: string;
-          },
+          firstName: string; lastName: string; email: string; phone?: string; zip?: string; state?: string; targetUsername: string; token: string;
+        },
           {
             success: boolean; message: string; contactId?: string; redirectUrl?: string; fieldErrors?: any;
           }>(functionsInstance, 'addContact');
@@ -167,12 +174,12 @@ export default function ContactCapturePage() {
                 messages.push(`${key}: ${fieldErrors[key].join(', ')}`);
               }
             }
-            if(messages.length > 0) {
+            if (messages.length > 0) {
               description += "\n\nDetails:\n" + messages.join("\n");
             }
           }
         } else if (error.message) {
-            description = error.message;
+          description = error.message;
         }
 
         toast({
@@ -301,7 +308,7 @@ export default function ContactCapturePage() {
                       <FormItem>
                         <FormLabel>ZIP Code</FormLabel>
                         <FormControl>
-                          <Input placeholder="90210" {...field} maxLength={5}/>
+                          <Input placeholder="90210" {...field} maxLength={5} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -309,7 +316,7 @@ export default function ContactCapturePage() {
                   />
                   <FormItem>
                     <FormLabel>State</FormLabel>
-                    <Input placeholder="CA" value={derivedState ?? ''} readOnly disabled className="bg-muted"/>
+                    <Input placeholder="CA" value={derivedState ?? ''} readOnly disabled className="bg-muted" />
                     <FormDescription className="text-xs">Auto-filled from ZIP</FormDescription>
                   </FormItem>
                 </div>
