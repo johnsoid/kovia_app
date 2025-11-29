@@ -29,19 +29,12 @@ export const addContact = onCall(
     }
 
     // 2. Token check (from data)
-    const qrSecret = process.env.QR_SECRET;
-    // Note: In onCall, data is in request.data, not query/body
-    // We expect the token to be passed in the data object now, or we can keep checking query if we really want,
-    // but onCall usually passes everything in the body.
-    // However, the previous code checked req.query.token.
-    // Let's assume for better security we move token to the body payload, OR we check context.
-    // For now, let's look for it in the data payload to be consistent with onCall patterns.
+    // We now expect a unique token per performer, validated AFTER fetching the performer profile.
+    // We still check if it exists here to fail fast if missing.
     const token = request.data.token;
 
-    // Fallback: If the frontend sends it as a query param, onCall doesn't easily expose raw query params.
-    // We will update frontend to send token in body.
-    if (!token || token !== qrSecret) {
-      throw new HttpsError("permission-denied", "Invalid or missing QR token.");
+    if (!token) {
+      throw new HttpsError("permission-denied", "Missing QR token.");
     }
 
     // 3. Validate body (request.data is already parsed JSON)
@@ -74,6 +67,14 @@ export const addContact = onCall(
       const performerDoc = performerSnapshot.docs[0];
       const performerUid = performerDoc.id;
       const performerProfileData = performerDoc.data();
+
+      // 4b. Validate Token
+      // The token provided in the request must match the one stored in the performer's profile.
+      if (performerProfileData.contactToken !== token) {
+        // eslint-disable-next-line no-console
+        console.error(`Invalid token provided for performer '${targetUsername}'.`);
+        throw new HttpsError("permission-denied", "Invalid QR token.");
+      }
 
       const contactToSave = {
         ...contactData,

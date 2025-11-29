@@ -1,6 +1,5 @@
 'use client';
 
-import type { z } from 'zod';
 import * as z from 'zod'; // Import Zod
 import type { DocumentData } from 'firebase/firestore';
 import { useEffect, useState, useCallback } from 'react';
@@ -18,8 +17,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { QrCode, Save, Loader2, Trash2, PlusCircle, LogOut } from 'lucide-react';
+import { QrCode, Save, Loader2, Trash2, PlusCircle, LogOut, RefreshCw } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription as DialogDescriptionShad, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'; // Renamed Shadcn DialogDescription
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import QRCode from 'qrcode.react'; // Need to install: npm install qrcode.react @types/qrcode.react
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -36,6 +46,7 @@ const performerProfileSchema = z.object({
   userName: z.string().min(3, "Username must be at least 3 characters").regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
   defaultRedirectUrl: z.string().url("Must be a valid URL").optional().or(z.literal('')),
   socials: z.array(socialProfileSchema).optional(),
+  contactToken: z.string().optional(), // Added contactToken
 });
 
 type PerformerProfileFormData = z.infer<typeof performerProfileSchema>;
@@ -61,6 +72,7 @@ export default function PerformerDashboard() {
   const [isLoadingContacts, setIsLoadingContacts] = useState(true);
   const [capturedContacts, setCapturedContacts] = useState<CapturedContact[]>([]);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const form = useForm<PerformerProfileFormData>({
     resolver: zodResolver(performerProfileSchema),
@@ -70,10 +82,11 @@ export default function PerformerDashboard() {
       userName: '',
       defaultRedirectUrl: '',
       socials: [],
+      contactToken: '',
     },
   });
 
-   const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "socials",
   });
@@ -90,10 +103,20 @@ export default function PerformerDashboard() {
 
         if (docSnap.exists()) {
           const data = docSnap.data() as PerformerProfileFormData;
+
+          // Auto-generate token if missing (Migration)
+          if (!data.contactToken) {
+            console.log('[Dashboard] Missing contactToken, generating new one...');
+            const newToken = crypto.randomUUID();
+            await updateDoc(docRef, { contactToken: newToken });
+            data.contactToken = newToken;
+            toast({ title: "Security Update", description: "A unique secure token has been generated for your account." });
+          }
+
           form.reset(data); // Populate form with existing data
           setProfileExists(true);
-          if(data.userName && typeof window !== 'undefined') { // Ensure window is defined
-            setQrCodeUrl(`${window.location.origin}/c/${data.userName}`);
+          if (data.userName && data.contactToken && typeof window !== 'undefined') { // Ensure window is defined
+            setQrCodeUrl(`${window.location.origin}/c/${data.userName}?token=${data.contactToken}`);
           }
           console.log('[Dashboard] Profile fetched:', docSnap.data());
         } else {
@@ -113,7 +136,7 @@ export default function PerformerDashboard() {
     [form, toast, user, db]
   );
 
-   // Fetch Captured Contacts
+  // Fetch Captured Contacts
   const fetchContacts = useCallback(
     async (performerUid: string) => {
       if (!db || !user) return;
@@ -170,21 +193,32 @@ export default function PerformerDashboard() {
 
   // Handle Profile Save/Update
   const onSubmit = async (data: PerformerProfileFormData) => {
-    if (!user) return;
+    if (!user || !db) return; // Added db check
     setIsSaving(true);
     try {
       const docRef = doc(db, 'performers', user.uid);
+
+      // Ensure we have a token on create
+      let tokenToSave = data.contactToken;
+      if (!tokenToSave) {
+        tokenToSave = crypto.randomUUID();
+      }
+
       // Ensure username uniqueness check here if necessary (e.g., using a Cloud Function)
       if (profileExists) {
-        await updateDoc(docRef, { ...data, userId: user.uid }); // Add userId on update too
+        await updateDoc(docRef, { ...data, userId: user.uid, contactToken: tokenToSave }); // Add userId on update too
         toast({ title: "Success", description: "Profile updated successfully." });
       } else {
-        await setDoc(docRef, { ...data, userId: user.uid, email: user.email }); // Add userId and email on creation
+        await setDoc(docRef, { ...data, userId: user.uid, email: user.email, contactToken: tokenToSave }); // Add userId and email on creation
         setProfileExists(true); // Set profile exists after creation
         toast({ title: "Success", description: "Profile created successfully." });
       }
+
+      // Update local form state with token if it was generated
+      form.setValue('contactToken', tokenToSave);
+
       if (typeof window !== 'undefined') { // Ensure window is defined
-        setQrCodeUrl(`${window.location.origin}/c/${data.userName}`); // Update QR code URL after save
+        setQrCodeUrl(`${window.location.origin}/c/${data.userName}?token=${tokenToSave}`); // Update QR code URL after save
       }
       fetchContacts(user.uid); // Re-fetch contacts in case username changed
     } catch (error: any) {
@@ -199,25 +233,50 @@ export default function PerformerDashboard() {
     }
   };
 
+  const handleRegenerateToken = async () => {
+    if (!user || !db) return; // Added db check
+    setIsRegenerating(true);
+    try {
+      const newToken = crypto.randomUUID();
+      const docRef = doc(db, 'performers', user.uid);
+      await updateDoc(docRef, { contactToken: newToken });
+
+      form.setValue('contactToken', newToken);
+      const userName = form.getValues('userName');
+      if (userName && typeof window !== 'undefined') {
+        setQrCodeUrl(`${window.location.origin}/c/${userName}?token=${newToken}`);
+      }
+
+      toast({ title: "Success", description: "QR Code reset successfully. Old codes will no longer work." });
+    } catch (error) {
+      console.error("Error regenerating token:", error);
+      toast({ title: "Error", description: "Could not reset QR Code.", variant: "destructive" });
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   const handleLogout = async () => {
+    if (!auth) return; // Added auth check
     try {
       await signOut(auth);
       router.push('/auth');
     } catch (error) {
       console.error("Error signing out: ", error);
-      toast({ title: "Logout Error", description: "Could not log out.", variant: "destructive"})
+      toast({ title: "Logout Error", description: "Could not log out.", variant: "destructive" })
     }
   };
 
   // Use Effect for generating QR code URL to avoid hydration errors
   useEffect(() => {
     const userName = form.getValues('userName');
-    if (userName && typeof window !== 'undefined') {
-      setQrCodeUrl(`${window.location.origin}/c/${userName}`);
+    const token = form.getValues('contactToken');
+    if (userName && token && typeof window !== 'undefined') {
+      setQrCodeUrl(`${window.location.origin}/c/${userName}?token=${token}`);
     } else {
       setQrCodeUrl('');
     }
-  }, [form, form.watch('userName')]); // Watch username changes. Added form dependency
+  }, [form, form.watch('userName'), form.watch('contactToken')]); // Watch username changes. Added form dependency
 
   if (authLoading || isLoadingProfile) {
     return (
@@ -359,24 +418,51 @@ export default function PerformerDashboard() {
                 <Save className="mr-2 h-4 w-4" /> {profileExists ? 'Update Profile' : 'Create Profile'}
               </Button>
               {profileExists && qrCodeUrl && (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      <QrCode className="mr-2 h-4 w-4" /> Show QR Code
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                      <DialogTitle>Your Contact Capture QR Code</DialogTitle>
-                      <DialogDescriptionShad>
-                        Share this code with your audience to capture contacts. It links to: {qrCodeUrl}
-                      </DialogDescriptionShad>
-                    </DialogHeader>
-                    <div className="flex justify-center p-4 bg-white rounded-md">
-                      <QRCode value={qrCodeUrl} size={256} level="H" />
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <div className="flex gap-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline">
+                        <QrCode className="mr-2 h-4 w-4" /> Show QR Code
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Your Contact Capture QR Code</DialogTitle>
+                        <DialogDescriptionShad>
+                          Share this code with your audience to capture contacts. It links to: {qrCodeUrl}
+                        </DialogDescriptionShad>
+                      </DialogHeader>
+                      <div className="flex flex-col items-center gap-4 p-4 bg-white rounded-md">
+                        <QRCode value={qrCodeUrl} size={256} level="H" />
+
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" className="w-full mt-4">
+                              <RefreshCw className="mr-2 h-4 w-4" /> Reset QR Code
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently invalidate your current QR code.
+                                <br /><br />
+                                <strong className="text-red-500">Any printed flyers or shared links using the old code will stop working immediately.</strong>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={handleRegenerateToken} className="bg-red-600 hover:bg-red-700">
+                                Yes, Reset Code
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               )}
               {profileExists && !qrCodeUrl && (
                 <p className="text-sm text-muted-foreground">Save profile with a username to generate QR code.</p>

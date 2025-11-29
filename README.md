@@ -11,13 +11,15 @@ Kovia App is a modern, full-stack web platform designed for live entertainers (p
 ## Core Features
 
 - **Production Hosting:** Live on Firebase App Hosting, with CI/CD via GitHub Actions.
-- **Environment Variables:** Securely managed via Firebase App Hosting Secret Manager (no longer using `.env.local` in deployment).
-- **Firebase Authentication (Email/Password):** Secure login and registration for performers.
-- **Performer Dashboard:** Manage performer profile, view and manage captured contacts. Fully functional in production.
-- **Personalized QR Code Generation:** Each performer gets a unique QR code linking to their public contact capture page.
-- **Public Contact Capture Page:** `/c/[username]` route where fans submit their info. Fully functional in production.
+- **Environment Variables:** Securely managed via Firebase App Hosting Secret Manager.
+- **Firebase Authentication:**
+    - **Email/Password:** Secure login for performers.
+    - **Anonymous Auth:** Secure, frictionless session management for public contact submission.
+- **Performer Dashboard:** Manage profile, view contacts, and **Reset QR Code** (Token Rotation).
+- **Secure QR Codes:** Unique, revocable tokens (`?token=UUID`) for each performer.
+- **Public Contact Capture Page:** `/c/[username]` route. Securely submits data via Cloud Functions.
 - **Firestore Data Storage:** Performer profiles and captured contacts are stored in Firebase Cloud Firestore.
-- **Admin Dashboard:** Basic placeholder for admin user listing (future work required for full functionality).
+- **Admin Dashboard:** Basic placeholder for admin user listing.
 - **Contact Data Details:** Contact info is normalized (first/last name, email, phone, ZIP, state).
 - **Post-Submission Redirect:** Performers can configure a redirect URL after fans submit their info.
 
@@ -26,7 +28,10 @@ Kovia App is a modern, full-stack web platform designed for live entertainers (p
 ## Tech Stack
 
 - **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS, Shadcn UI, Zod (schema validation), React Hook Form (form management)
-- **Backend/Data:** Firebase (Authentication, Firestore, Hosting). Cloud Functions are planned for secure public writes. Production environment is configured and running.
+- **Backend/Data:** Firebase (Authentication, Firestore, Hosting).
+- **Cloud Functions:** `addContact` (Gen 2) handles secure contact submission.
+    - **Security:** Uses Firebase Anonymous Authentication + Unique Performer Tokens (`contactToken`).
+    - **Access Control:** Publicly invokable (`allUsers`) but logically restricted to requests with valid tokens.
 - **Development:** npm/yarn, Git
 
 ---
