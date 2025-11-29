@@ -118,19 +118,32 @@ export default function ContactCapturePage() {
       setIsSubmitting(true);
 
       try {
-        // 1. Authenticate Anonymously
-        await signInAnonymously(auth);
+        // 1. Ensure Anonymous Auth
+        let user = auth.currentUser;
+        if (!user) {
+          console.log('[ContactCapture] Signing in anonymously...');
+          const userCredential = await signInAnonymously(auth);
+          user = userCredential.user;
+          console.log('[ContactCapture] Signed in as:', user.uid);
+        } else {
+          console.log('[ContactCapture] Already signed in as:', user.uid);
+        }
+
+        // 2. Force Token Refresh to ensure we have a valid token for Cloud Run IAM
+        // This handles cases where a stale emulator token might be cached
+        const idToken = await user.getIdToken(true);
+        console.log('[ContactCapture] ID Token refreshed. Ready to call function.');
 
         const payload = {
           ...formData,
           state: derivedState || '',
           targetUsername: username,
-          token: token || '', // Pass token from URL
+          token: token || undefined, // Pass the QR token in the body
         };
 
         console.log('[ContactCapture] Calling addContact Cloud Function with payload:', payload);
         const addContactFunction = httpsCallable<{
-          firstName: string; lastName: string; email: string; phone?: string; zip?: string; state?: string; targetUsername: string; token: string;
+          firstName: string; lastName: string; email: string; phone?: string; zip?: string; state?: string; targetUsername: string; token?: string;
         },
           {
             success: boolean; message: string; contactId?: string; redirectUrl?: string; fieldErrors?: any;

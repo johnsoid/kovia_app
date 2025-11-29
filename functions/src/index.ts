@@ -1,8 +1,8 @@
 /* eslint-disable max-len */
-import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { initializeApp } from "firebase-admin/app";
-import { z } from "zod";
+import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
+import {getFirestore, FieldValue} from "firebase-admin/firestore";
+import {initializeApp} from "firebase-admin/app";
+import {z} from "zod";
 
 // Initialize Firebase Admin SDK
 initializeApp();
@@ -21,7 +21,7 @@ const contactSchema = z.object({
 });
 
 export const addContact = onCall(
-  { region: "us-central1" },
+  {region: "us-central1"},
   async (request: CallableRequest) => {
     // 1. Auth Check
     if (!request.auth) {
@@ -58,7 +58,7 @@ export const addContact = onCall(
       );
     }
 
-    const { targetUsername, ...contactData } = validationResult.data;
+    const {targetUsername, ...contactData} = validationResult.data;
     try {
       // 4. Firestore lookup and write
       const performersRef = db.collection("performers");
