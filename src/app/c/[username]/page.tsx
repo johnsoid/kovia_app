@@ -20,13 +20,19 @@ import Image from 'next/image'; // Using next/image for potential optimization
 import { getZipCodeInfo } from '@/services/zip-code'; // Import zip code service
 import { signInAnonymously } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const contactSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email address"),
-  phone: z.string().optional(), // Assuming phone is optional
-  zip: z.string().regex(/^\d{5}$/, "Must be a 5-digit ZIP code").optional().or(z.literal('')), // Optional 5-digit zip
+  phone: z.string().refine((val) => !val || isValidPhoneNumber(val), { message: "Invalid phone number" }).optional(),
+  zip: z.string().regex(/^\d{5}$/, "Must be a 5-digit ZIP code").optional().or(z.literal('')),
+  country: z.string().optional(),
+  marketingConsentEmail: z.boolean().default(true),
+  marketingConsentSMS: z.boolean().default(true),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
@@ -62,6 +68,9 @@ export default function ContactCapturePage() {
       email: '',
       phone: '',
       zip: '',
+      country: 'United States',
+      marketingConsentEmail: true,
+      marketingConsentSMS: true,
     },
   });
 
@@ -138,12 +147,12 @@ export default function ContactCapturePage() {
           ...formData,
           state: derivedState || '',
           targetUsername: username,
-          token: token || undefined, // Pass the QR token in the body
+          token: token || undefined,
         };
 
         console.log('[ContactCapture] Calling addContact Cloud Function with payload:', payload);
         const addContactFunction = httpsCallable<{
-          firstName: string; lastName: string; email: string; phone?: string; zip?: string; state?: string; targetUsername: string; token?: string;
+          firstName: string; lastName: string; email: string; phone?: string; zip?: string; state?: string; country?: string; marketingConsentEmail?: boolean; marketingConsentSMS?: boolean; targetUsername: string; token?: string;
         },
           {
             success: boolean; message: string; contactId?: string; redirectUrl?: string; fieldErrors?: any;
@@ -305,15 +314,37 @@ export default function ContactCapturePage() {
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Phone Number (Optional)</FormLabel>
+                      <FormLabel>Phone Number</FormLabel>
                       <FormControl>
-                        <Input type="tel" placeholder="(555) 123-4567" {...field} />
+                        <PhoneInput
+                          placeholder="Enter phone number"
+                          defaultCountry="US"
+                          value={field.value}
+                          onChange={field.onChange}
+                          onCountryChange={(country) => {
+                            // Simple mapping or just set the code. User asked for "Country field" to be filled.
+                            // We can map 'US' -> 'United States' if we want, or just use the code.
+                            // Let's try to be a bit smarter if possible, or just use the code for now and let user edit.
+                            // Actually, let's just set it to the country name if we can, or the code.
+                            // For now, let's set it to the code (e.g. US) which is clearer for auto-fill than a full name that might vary.
+                            // But user said "filled based on the country code".
+                            if (country) {
+                              const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+                              try {
+                                form.setValue('country', regionNames.of(country));
+                              } catch (e) {
+                                form.setValue('country', country);
+                              }
+                            }
+                          }}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="zip"
@@ -330,8 +361,64 @@ export default function ContactCapturePage() {
                   <FormItem>
                     <FormLabel>State</FormLabel>
                     <Input placeholder="CA" value={derivedState ?? ''} readOnly disabled className="bg-muted" />
-                    <FormDescription className="text-xs">Auto-filled from ZIP</FormDescription>
+                    <FormDescription className="text-xs">Auto-filled</FormDescription>
                   </FormItem>
+                  <FormField
+                    control={form.control}
+                    name="country"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Country</FormLabel>
+                        <FormControl>
+                          <Input placeholder="United States" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="space-y-4 pt-2">
+                  <FormField
+                    control={form.control}
+                    name="marketingConsentEmail"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>
+                            I agree to receive marketing emails.
+                          </FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="marketingConsentSMS"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>
+                            I agree to receive marketing SMS.
+                          </FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    By submitting this form, you agree to our <a href="#" className="underline hover:text-primary">Terms & Conditions</a>.
+                  </p>
                 </div>
               </CardContent>
               <CardFooter>

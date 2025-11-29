@@ -12,6 +12,13 @@
 - Environment variables migrated to Secret Manager for production
 - Firebase App Hosting CI/CD connected to GitHub main branch
 
+## v1.2 – Contact Capture Enhancements (2025-11-29)
+
+- **Phone Number Validation:** Integrated `react-phone-number-input` for international number support and validation.
+- **Address Auto-fill:** Implemented Zip Code to State auto-fill using `zippopotam.us` API. Added dynamic Country field.
+- **Marketing Consent:** Added opt-out checkboxes for Email and SMS marketing consent.
+- **UX Improvements:** Enhanced form validation and feedback.
+
 ## v1.1 – Security Hardening & Anonymous Auth (2025-11-29)
 
 - **Cloud Function Security:** Implemented `addContact` as a Callable Function (`onCall`) with `allUsers` IAM access.

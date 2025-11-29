@@ -19,10 +19,24 @@ export interface ZipCodeInfo {
  * @returns A promise that resolves to a ZipCodeInfo object containing city and state.
  */
 export async function getZipCodeInfo(zipCode: string): Promise<ZipCodeInfo> {
-  // TODO: Implement this by calling an API.
-
-  return {
-    city: 'Beverly Hills',
-    state: 'CA',
-  };
+  try {
+    const response = await fetch(`https://api.zippopotam.us/us/${zipCode}`);
+    if (!response.ok) {
+      // Return empty or throw, but for now let's just return empty values so the UI handles it gracefully or we can throw to let the caller handle it.
+      // The caller (page.tsx) catches errors.
+      throw new Error('Invalid zip code');
+    }
+    const data = await response.json();
+    if (data.places && data.places.length > 0) {
+      return {
+        city: data.places[0]['place name'],
+        state: data.places[0]['state abbreviation'],
+      };
+    }
+    throw new Error('No place found for zip code');
+  } catch (error) {
+    // console.error("Error fetching zip code info:", error); 
+    // Re-throw to let the component handle the error state
+    throw error;
+  }
 }

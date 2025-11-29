@@ -38,7 +38,8 @@ Kovia App is a modern, full-stack web platform designed for live entertainers (p
 *   **Contact Capture Page:** A public-facing page (accessed via `/c/[username]`) where audience members can submit their name, email, phone (optional), and ZIP code (optional). **Working in production.**
 *   **Data Storage:** Performer profiles and captured contacts are stored securely in Firestore.
 *   **Admin Dashboard (Basic):** A simple view for administrators to see registered users (**placeholder only**; requires backend logic for full user listing).
-*   **ZIP Code Lookup:** Automatically determines the state based on the entered ZIP code on the capture form.
+*   **Smart Address Fill:** Automatically determines the State based on ZIP code and updates Country based on Phone Number.
+*   **Marketing Consent:** Captures explicit opt-in/out for Email and SMS marketing.
 
 ## Getting Started
 
